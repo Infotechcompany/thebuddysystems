@@ -1,52 +1,12 @@
 version: '3.8'
-
 services:
-  scraper:
-    image: vimagick/scrapyd
+  app:
+    image: 'jc21/nginx-proxy-manager:latest'
+    restart: unless-stopped
     ports:
-      - "6800:6800"
+      - '80:80'
+      - '81:81'
+      - '443:443'
     volumes:
-      - ./data:/var/lib/scrapyd
-      - ./logs:/var/log/scrapyd
-      - ./config:/etc/scrapyd/
-    command: scrapyd
-
-  db:
-    image: postgres
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_DB: newsdb
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-
-  backend:
-    build: ./backend
-    ports:
-      - "5000:5000"
-    depends_on:
-      - db
-
-  cms:
-    image: wordpress
-    ports:
-      - "8000:80"
-    environment:
-      WORDPRESS_DB_HOST: db
-      WORDPRESS_DB_USER: user
-      WORDPRESS_DB_PASSWORD: password
-      WORDPRESS_DB_NAME: newsdb
-    depends_on:
-      - db
-
-  webserver:
-    image: nginx
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx:/etc/nginx/conf.d
-    depends_on:
-      - cms
-
-volumes:
-  db_data:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
