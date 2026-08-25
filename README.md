@@ -73,6 +73,8 @@ Binding to `0.0.0.0` exposes a port on every host interface. Do that only behind
 
 Compose continues to derive its project name from the checkout-directory basename, matching the legacy deployment behavior and preserving the associated named-volume identity. Do not add or change `COMPOSE_PROJECT_NAME` on an existing deployment unless you are intentionally migrating its volumes and have verified backup, restore, and rollback. Record `docker compose ls` and `docker volume ls` before any such migration.
 
+An earlier unmerged revision of this repair could generate `.env` with `COMPOSE_PROJECT_NAME=thebuddysystems`. In a checkout whose directory has another name, setup detects that exact stale value and stops before secret migration or Compose startup because it cannot know which named-volume set contains the installation. Inspect `docker compose ls` and `docker volume ls`. Remove the line to retain the legacy checkout-derived identity. If the fixed `thebuddysystems` identity is intentional and its volumes have been verified, acknowledge it for that invocation with `THEBUDDYSYSTEMS_ALLOW_PROJECT_NAME=thebuddysystems ./setup.sh`; this acknowledgement does not migrate or copy volumes.
+
 Secrets are local files and are never committed:
 
 ```text

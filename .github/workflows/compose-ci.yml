@@ -70,7 +70,7 @@ jobs:
           test_root="$(mktemp -d)"
           legacy_checkout="$test_root/legacy-install"
           mkdir -p "$legacy_checkout/.secrets" "$legacy_checkout/config"
-          cp docker-compose.yml .env.example "$legacy_checkout/"
+          cp docker-compose.yml .env.example setup.sh "$legacy_checkout/"
           cp config/my.cnf "$legacy_checkout/config/"
           cp .secrets/db_root_password.txt .secrets/db_password.txt "$legacy_checkout/.secrets/"
           env -u COMPOSE_PROJECT_NAME docker compose \
@@ -86,6 +86,15 @@ jobs:
               model = json.load(stream)
           assert model["name"] == "legacy-install", model["name"]
           PY
+          cp "$legacy_checkout/.env.example" "$legacy_checkout/.env"
+          printf '\n%s\n' 'COMPOSE_PROJECT_NAME=thebuddysystems' >> "$legacy_checkout/.env"
+          if bash "$legacy_checkout/setup.sh" --validate-only > "$test_root/stale-name.log" 2>&1; then
+            echo "setup unexpectedly accepted a stale generated project name" >&2
+            exit 1
+          fi
+          grep -F 'Refusing to select a possibly different named-volume set' "$test_root/stale-name.log"
+          THEBUDDYSYSTEMS_ALLOW_PROJECT_NAME=thebuddysystems \
+            bash "$legacy_checkout/setup.sh" --validate-only
 
       - name: Validate shell syntax
         run: bash -n setup.sh

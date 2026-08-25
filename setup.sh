@@ -31,6 +31,21 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
 }
 
+validate_project_identity() {
+  local checkout_name=${ROOT_DIR##*/}
+
+  if [[ "$checkout_name" == "thebuddysystems" ]] \
+    || ! grep -Fqx 'COMPOSE_PROJECT_NAME=thebuddysystems' .env; then
+    return 0
+  fi
+  if [[ "${THEBUDDYSYSTEMS_ALLOW_PROJECT_NAME:-}" == "thebuddysystems" ]]; then
+    log "Using acknowledged Compose project name 'thebuddysystems' instead of checkout-derived '$checkout_name'"
+    return 0
+  fi
+
+  fail "Stale generated COMPOSE_PROJECT_NAME=thebuddysystems detected in .env for checkout '$checkout_name'. Refusing to select a possibly different named-volume set. Inspect 'docker compose ls' and 'docker volume ls'; remove that line to preserve checkout-derived project '$checkout_name', or, only after verifying the fixed identity is intentional, rerun with THEBUDDYSYSTEMS_ALLOW_PROJECT_NAME=thebuddysystems."
+}
+
 migrate_legacy_secret() {
   local destination=$1
   shift
@@ -85,6 +100,7 @@ write_secret() {
 
 require_command docker
 require_command cmp
+require_command grep
 docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is required (docker compose)"
 
 if [[ ! -f .env ]]; then
@@ -93,6 +109,8 @@ if [[ ! -f .env ]]; then
   chmod 600 .env
   log "Created .env from .env.example; review APP_IMAGE and deployment settings before exposure"
 fi
+
+validate_project_identity
 
 mkdir -p -m 700 "$SECRETS_DIR"
 migrate_legacy_secret "$DB_ROOT_PASSWORD_FILE" "${LEGACY_DB_ROOT_PASSWORD_FILES[@]}"
