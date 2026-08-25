@@ -39,14 +39,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Materialize non-secret validation inputs
+      - name: Exercise legacy credential migration
         run: |
           set -euo pipefail
-          cp .env.example .env
           mkdir -p .secrets
-          printf '%s\n' 'ci-only-root-password' > .secrets/db_root_password.txt
-          printf '%s\n' 'ci-only-app-password' > .secrets/db_password.txt
-          chmod 600 .env .secrets/*.txt
+          printf '%s\n' 'ci-only-root-password' > .secrets/db_root_pwd.txt
+          printf '%s\n' 'ci-only-app-password' > .secrets/mysql_pwd.txt
+          chmod 600 .secrets/*.txt
+          bash setup.sh --validate-only
+          cmp -s .secrets/db_root_pwd.txt .secrets/db_root_password.txt
+          cmp -s .secrets/mysql_pwd.txt .secrets/db_password.txt
+          test "$(stat -c '%a' .env)" = "600"
+          test "$(stat -c '%a' .secrets/db_root_password.txt)" = "600"
+          test "$(stat -c '%a' .secrets/db_password.txt)" = "600"
 
       - name: Validate shell syntax
         run: bash -n setup.sh

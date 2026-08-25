@@ -9,6 +9,14 @@ cd "$ROOT_DIR"
 SECRETS_DIR="$ROOT_DIR/.secrets"
 DB_ROOT_PASSWORD_FILE="$SECRETS_DIR/db_root_password.txt"
 DB_PASSWORD_FILE="$SECRETS_DIR/db_password.txt"
+LEGACY_DB_ROOT_PASSWORD_FILES=(
+  "$SECRETS_DIR/db_root_pwd.txt"
+  "$ROOT_DIR/secrets/db_root_pwd.txt"
+)
+LEGACY_DB_PASSWORD_FILES=(
+  "$SECRETS_DIR/mysql_pwd.txt"
+  "$ROOT_DIR/secrets/mysql_pwd.txt"
+)
 
 log() {
   printf '[thebuddysystems] %s\n' "$*"
@@ -21,6 +29,33 @@ fail() {
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
+}
+
+migrate_legacy_secret() {
+  local destination=$1
+  shift
+  local candidate source="" temporary
+
+  if [[ -s "$destination" ]]; then
+    chmod 600 "$destination"
+    return 0
+  fi
+
+  for candidate in "$@"; do
+    [[ -s "$candidate" ]] || continue
+    if [[ -n "$source" ]] && ! cmp -s -- "$source" "$candidate"; then
+      fail "Conflicting legacy secret files for $destination: $source and $candidate"
+    fi
+    source=$candidate
+  done
+
+  [[ -n "$source" ]] || return 0
+
+  temporary="$(mktemp "${destination}.XXXXXX")"
+  chmod 600 "$temporary"
+  cp -- "$source" "$temporary"
+  mv -f -- "$temporary" "$destination"
+  log "Migrated legacy secret $(basename "$source") to $(basename "$destination"); retained the source for rollback"
 }
 
 write_secret() {
@@ -48,6 +83,7 @@ write_secret() {
 }
 
 require_command docker
+require_command cmp
 docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is required (docker compose)"
 
 if [[ ! -f .env ]]; then
@@ -58,6 +94,8 @@ if [[ ! -f .env ]]; then
 fi
 
 mkdir -p -m 700 "$SECRETS_DIR"
+migrate_legacy_secret "$DB_ROOT_PASSWORD_FILE" "${LEGACY_DB_ROOT_PASSWORD_FILES[@]}"
+migrate_legacy_secret "$DB_PASSWORD_FILE" "${LEGACY_DB_PASSWORD_FILES[@]}"
 write_secret "$DB_ROOT_PASSWORD_FILE" 'Enter the MariaDB root password: '
 write_secret "$DB_PASSWORD_FILE" 'Enter the application database password: '
 

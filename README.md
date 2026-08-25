@@ -80,6 +80,8 @@ Secrets are local files and are never committed:
 
 Compose mounts them read-only under `/run/secrets`. File-backed Compose secrets reduce accidental environment leakage but do **not** encrypt the files on the Docker host; host access controls, disk encryption, backup policy, and secret rotation remain required.
 
+When upgrading an installation created by the legacy setup, `setup.sh` atomically migrates `.secrets/db_root_pwd.txt` and `.secrets/mysql_pwd.txt` (or the same files under the former `secrets/` path) to the current names before prompting. If multiple legacy copies exist with different contents, setup fails closed instead of guessing which credential matches the persistent database. Legacy source files are retained for rollback; verify the application and database with the migrated credentials before securely archiving or removing those copies.
+
 ## Security properties
 
 - The database has no published host port.
