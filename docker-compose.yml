@@ -1,91 +1,102 @@
-version: '3.8'
+name: ${COMPOSE_PROJECT_NAME:-thebuddysystems}
 
-secrets:
-  DB_ROOT_PWD:
-    file: ./secrets/db_root_pwd.txt
-  MYSQL_PWD:
-    file: ./secrets/mysql_pwd.txt
+services:
+  app:
+    image: ${APP_IMAGE:?Set APP_IMAGE in .env}
+    restart: unless-stopped
+    ports:
+      - "${APP_HTTP_BIND:-127.0.0.1}:${APP_HTTP_PORT:-8080}:80"
+      - "${APP_HTTPS_BIND:-127.0.0.1}:${APP_HTTPS_PORT:-8443}:443"
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME:?Set DB_NAME in .env}
+      DB_USER: ${DB_USER:?Set DB_USER in .env}
+      DB_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - app_data:/var/www/html
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+      - /run:rw,noexec,nosuid,nodev,size=16m
+    security_opt:
+      - no-new-privileges:true
+    secrets:
+      - source: db_password
+        target: db_password
+        mode: 0440
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-configs:
-  db_custom_config:
-    file: ./config/my.cnf
+  db:
+    image: ${DB_IMAGE:-mariadb:10.5}
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MYSQL_DATABASE: ${DB_NAME:?Set DB_NAME in .env}
+      MYSQL_USER: ${DB_USER:?Set DB_USER in .env}
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
+    expose:
+      - "3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    configs:
+      - source: db_custom_config
+        target: /etc/mysql/conf.d/zz-custom.cnf
+        mode: 0444
+    networks:
+      - backend
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mariadb-admin ping --host=127.0.0.1 --user=root
+          --password="$$(cat /run/secrets/db_root_password)" --silent
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    secrets:
+      - source: db_root_password
+        target: db_root_password
+        mode: 0400
+      - source: db_password
+        target: db_password
+        mode: 0400
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
 
 networks:
   frontend:
     driver: bridge
   backend:
     driver: bridge
+    internal: true
 
 volumes:
   db_data:
   app_data:
 
-services:
-  app:
-    image: your-app-image:1.0.0  # Use your actual app image
-    ports:
-      - '80:80'
-      - '443:443'
-    environment:
-      - DB_HOST=db
-      - DB_USER=${DB_USER}
-      - DB_NAME=${DB_NAME}
-      - DB_PASSWORD_FILE=/run/secrets/MYSQL_PWD
-    env_file:
-      - app.env
-    volumes:
-      - app_data:/var/www/html
-    networks:
-      - frontend
-    depends_on:
-      db:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    read_only: true
-    tmpfs:
-      - /tmp
-    secrets:
-      - MYSQL_PWD
-
-  db:
-    image: mariadb:10.5
-    environment:
-      - MYSQL_ROOT_PASSWORD_FILE=/run/secrets/DB_ROOT_PWD
-      - MYSQL_DATABASE=${DB_NAME}
-      - MYSQL_USER=${DB_USER}
-      - MYSQL_PASSWORD_FILE=/run/secrets/MYSQL_PWD
-    env_file:
-      - db.env
-    volumes:
-      - db_data:/var/lib/mysql
-      - db_custom_config:/etc/mysql/conf.d/custom.cnf
-    networks:
-      - backend
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
-    secrets:
-      - DB_ROOT_PWD
-      - MYSQL_PWD
+configs:
+  db_custom_config:
+    file: ./config/my.cnf
 
 secrets:
-  DB_ROOT_PWD:
-    file: ./secrets/db_root_pwd.txt
-  MYSQL_PWD:
-    file: ./secrets/mysql_pwd.txt
+  db_root_password:
+    file: ./.secrets/db_root_password.txt
+  db_password:
+    file: ./.secrets/db_password.txt
