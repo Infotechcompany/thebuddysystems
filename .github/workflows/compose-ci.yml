@@ -1,0 +1,82 @@
+name: Compose validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docker-compose.yml
+      - setup.sh
+      - .env.example
+      - config/**
+      - .github/workflows/compose-ci.yml
+  pull_request:
+    paths:
+      - docker-compose.yml
+      - setup.sh
+      - .env.example
+      - config/**
+      - .github/workflows/compose-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Validate shell syntax
+        run: bash -n setup.sh
+
+      - name: Prepare non-secret CI inputs
+        run: |
+          cp .env.example .env
+          sed -i 's|example.invalid/thebuddysystems/app:replace-me|nginx:1.29-alpine|' .env
+          sed -i 's|example.invalid/mariadb:review-required|mariadb:11.4.12|' .env
+
+      - name: Validate the Compose model
+        run: bash setup.sh --validate-only
+
+      - name: Verify isolation and dependency invariants
+        run: |
+          docker compose config --format json > rendered-compose.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          model = json.loads(Path("rendered-compose.json").read_text())
+          services = model["services"]
+          app = services["app"]
+          db = services["db"]
+
+          def sources(items):
+              return {item if isinstance(item, str) else item["source"] for item in items}
+
+          assert set(app["networks"]) == {"frontend", "backend"}
+          assert set(db["networks"]) == {"backend"}
+          assert model["networks"]["backend"]["internal"] is True
+          assert app["depends_on"]["db"]["condition"] == "service_healthy"
+          assert sources(app["secrets"]) == {"db_password"}
+          assert sources(db["secrets"]) == {"db_root_password", "db_password"}
+          assert db["configs"][0]["target"] == "/etc/mysql/conf.d/99-buddysystems.cnf"
+          assert not db.get("ports")
+          print("Compose deployment invariants verified")
+          PY
+
+      - name: Verify generated credential permissions
+        run: |
+          test "$(stat -c '%a' .secrets)" = "700"
+          test "$(stat -c '%a' .secrets/db_root_password.txt)" = "600"
+          test "$(stat -c '%a' .secrets/db_password.txt)" = "600"
+          test "$(wc -c < .secrets/db_root_password.txt)" = "64"
+          test "$(wc -c < .secrets/db_password.txt)" = "64"
