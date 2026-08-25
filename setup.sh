@@ -38,18 +38,19 @@ migrate_legacy_secret() {
 
   if [[ -s "$destination" ]]; then
     chmod 600 "$destination"
-    return 0
+    source=$destination
   fi
 
   for candidate in "$@"; do
     [[ -s "$candidate" ]] || continue
     if [[ -n "$source" ]] && ! cmp -s -- "$source" "$candidate"; then
-      fail "Conflicting legacy secret files for $destination: $source and $candidate"
+      fail "Conflicting canonical or legacy secret files for $destination: $source and $candidate"
     fi
-    source=$candidate
+    [[ -n "$source" ]] || source=$candidate
   done
 
   [[ -n "$source" ]] || return 0
+  [[ "$source" != "$destination" ]] || return 0
 
   temporary="$(mktemp "${destination}.XXXXXX")"
   chmod 600 "$temporary"
