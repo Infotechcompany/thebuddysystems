@@ -63,3 +63,49 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+
+      - name: Verify live portfolio endpoint
+        shell: bash
+        env:
+          SITE_URL: ${{ steps.deployment.outputs.page_url }}proofline-projects/
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+
+          fetched=false
+          for attempt in $(seq 1 12); do
+            if curl --fail --silent --show-error --location \
+                --connect-timeout 10 --max-time 30 \
+                "$SITE_URL" -o "$tmp_dir/index.html" \
+              && curl --fail --silent --show-error --location \
+                --connect-timeout 10 --max-time 30 \
+                "${SITE_URL}VERSION" -o "$tmp_dir/VERSION" \
+              && curl --fail --silent --show-error --location \
+                --connect-timeout 10 --max-time 30 \
+                "${SITE_URL}DEPLOYMENT_PROVENANCE.json" \
+                -o "$tmp_dir/DEPLOYMENT_PROVENANCE.json"; then
+              fetched=true
+              break
+            fi
+            sleep 5
+          done
+
+          test "$fetched" = true
+          grep -Fq '<title>The Next Impossible — Proofline Projects</title>' \
+            "$tmp_dir/index.html"
+          grep -Fxq '3.1.1-pages-subpath' "$tmp_dir/VERSION"
+          python - "$tmp_dir/DEPLOYMENT_PROVENANCE.json" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              data = json.load(handle)
+
+          assert data["upstream_sha256"] == (
+              "f44f22da0241b6ca23a897bd5de3ecd2ec6666fe51eb81aa37fec4f1847a9cbe"
+          )
+          assert data["deployment_path"] == "/proofline-projects/"
+          PY
+
+          printf 'Live endpoint verified: %s\n' "$SITE_URL"
