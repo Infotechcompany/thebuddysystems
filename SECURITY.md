@@ -1,21 +1,23 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+## Supported versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+This repository is a deployment template without numbered production releases. Security fixes are applied to the current `main` branch only.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+## Reporting a vulnerability
 
-## Reporting a Vulnerability
+Use GitHub private vulnerability reporting for this repository when available. Do not publish exploit details, credentials, private keys, customer data, or live infrastructure addresses in a public issue.
 
-Use this section to tell people how to report a vulnerability.
+If private reporting is unavailable, open a minimal public issue requesting a secure contact channel and omit all sensitive technical details until a private channel is established.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Include, where safe:
+
+- affected commit or file;
+- deployment assumptions required to reproduce the issue;
+- impact and plausible abuse path;
+- proof-of-concept steps using synthetic or disposable data;
+- recommended mitigation or rollback.
+
+## Credential incidents
+
+Treat any committed live credential as compromised. Rotate or revoke it first, inspect access logs, and only then consider history rewriting. Deleting the visible file from the latest commit is not sufficient containment.
