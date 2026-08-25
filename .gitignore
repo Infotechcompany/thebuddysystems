@@ -1,0 +1,17 @@
+# Local deployment configuration and secrets
+.env
+*.env
+!.env.example
+.secrets/
+secrets/
+
+# Runtime data and backups
+backups/
+*.log
+*.pid
+
+# Editor and OS metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
