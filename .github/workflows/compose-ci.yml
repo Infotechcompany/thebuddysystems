@@ -1,0 +1,98 @@
+name: Compose CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docker-compose.yml"
+      - "setup.sh"
+      - ".env.example"
+      - ".gitignore"
+      - "config/**"
+      - "templates-2.0.json"
+      - ".github/workflows/compose-ci.yml"
+  pull_request:
+    paths:
+      - "docker-compose.yml"
+      - "setup.sh"
+      - ".env.example"
+      - ".gitignore"
+      - "config/**"
+      - "templates-2.0.json"
+      - ".github/workflows/compose-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Materialize non-secret validation inputs
+        run: |
+          set -euo pipefail
+          cp .env.example .env
+          mkdir -p .secrets
+          printf '%s\n' 'ci-only-root-password' > .secrets/db_root_password.txt
+          printf '%s\n' 'ci-only-app-password' > .secrets/db_password.txt
+          chmod 600 .env .secrets/*.txt
+
+      - name: Validate shell syntax
+        run: bash -n setup.sh
+
+      - name: Validate Compose model
+        run: |
+          set -euo pipefail
+          docker compose config --quiet
+          docker compose config --format json > compose.resolved.json
+
+      - name: Assert deployment invariants
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          model = json.loads(Path("compose.resolved.json").read_text())
+          services = model["services"]
+          app = services["app"]
+          db = services["db"]
+
+          def network_names(service):
+              networks = service.get("networks", {})
+              return set(networks if isinstance(networks, list) else networks.keys())
+
+          assert {"frontend", "backend"} <= network_names(app), network_names(app)
+          assert network_names(db) == {"backend"}, network_names(db)
+          assert model["networks"]["backend"].get("internal") is True
+          assert not db.get("ports"), "database must not publish a host port"
+          assert app.get("depends_on", {}).get("db", {}).get("condition") == "service_healthy"
+          assert app.get("read_only") is True
+          assert "no-new-privileges:true" in app.get("security_opt", [])
+          assert "no-new-privileges:true" in db.get("security_opt", [])
+          assert {"db_password"} <= set(app.get("secrets", []))
+          assert {"db_password", "db_root_password"} <= set(db.get("secrets", []))
+          assert {"db_password", "db_root_password"} <= set(model.get("secrets", {}))
+          assert "db_custom_config" in model.get("configs", {})
+          PY
+
+      - name: Validate Portainer template JSON
+        run: python3 -m json.tool templates-2.0.json >/dev/null
+
+      - name: Upload resolved non-secret model
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: resolved-compose-model
+          path: compose.resolved.json
+          if-no-files-found: error
+          retention-days: 14
