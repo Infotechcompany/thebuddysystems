@@ -1,0 +1,17 @@
+# Local deployment settings and secret material
+.env
+.env.*
+!.env.example
+.secrets/
+secrets/
+
+# Local overrides and generated evidence
+compose.override.yaml
+docker-compose.override.yml
+rendered-compose.json
+*.log
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
